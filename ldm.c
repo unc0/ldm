@@ -341,13 +341,13 @@ device_new (struct udev_device *dev)
         vid = strtol(udev_device_get_sysattr_value(dev, "idVendor"),  NULL, 16);
         pid = strtol(udev_device_get_sysattr_value(dev, "idProduct"), NULL, 16);
 
-        log_write("DEBUG VID", (char *)udev_device_get_sysattr_value(dev, "idVendor"));
-        log_write("DEBUG PID", (char *)udev_device_get_sysattr_value(dev, "idProduct"));
+        syslog(LOG_INFO, (char *)udev_device_get_sysattr_value(dev, "idVendor"));
+        syslog(LOG_INFO, (char *)udev_device_get_sysattr_value(dev, "idProduct"));
 
         if (vid == APPLE_VID    &&
             pid >= IDEV_PID_LOW &&
             pid <= IDEV_PID_HI) {
-                log_write("INFO", "iDevice detected\n");
+                syslog(LOG_INFO, "iDevice detected\n");
                 device->type = DEVICE_IDEVICE;
         }
     }
@@ -551,14 +551,7 @@ main (int argc, char **argv)
         return 1;
     }
 
-<<<<<<< HEAD
-    if (!log_open()) {
-        printf("Cannot open the log for writing\nAre you running me as root ?\n");
-        return 0;
-    }   
-=======
     openlog("ldm", LOG_CONS, LOG_DAEMON);
->>>>>>> master
 
     if (!daemonize()) {
         printf("Could not spawn the daemon...\n");
@@ -592,14 +585,10 @@ main (int argc, char **argv)
         syslog(LOG_ERR, "Cannot enable receiving");   
         goto cleanup;
     }
-<<<<<<< HEAD
+
     if (udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL) ||
         udev_monitor_filter_add_match_subsystem_devtype(monitor, "usb", NULL)) {
-        log_write("ERR", "Cannot set the filters");
-=======
-    if (udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL)) {
-        syslog(LOG_ERR, "Cannot set the filter");
->>>>>>> master
+        syslog(LOG_ERR, "Cannot set the filters");
         goto cleanup;
     }
 
