@@ -8,4 +8,5 @@ It does mount every device in /media and names them by either
 (in order) volume label, volume uuid or device serial or using the
 fstab rule for that device, if defined.
 Everything in ~14Kb of C code with libudev as only dependency.
-
+Oh, it will even handle your iphone/ipod touch as long as ifuse is
+installed.

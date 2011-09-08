@@ -15,6 +15,7 @@ enum {
     DEVICE_VOLUME,
     DEVICE_CD,
     DEVICE_FLOPPY,
+    DEVICE_IDEVICE,
     DEVICE_UNK
 };
 
@@ -41,6 +42,7 @@ typedef struct device_t  {
     struct fstab_node_t *fstab_entry;
 } device_t;
 
+#define IFUSE_CMD   "/usr/bin/ifuse %s"
 #define MOUNT_CMD   "/bin/mount -t %s -o uid=%i,gid=%i,%s %s %s"
 #define UMOUNT_CMD  "/bin/umount %s"
 #define MAX_DEVICES 20
@@ -208,6 +210,9 @@ device_is_mounted (struct device_t *device)
     FILE *f;
     struct mntent *mntent;
 
+    if (!device->devnode)
+        return 0;
+
     f = setmntent(MTAB_PATH, "r");
     if (!f)
         return 0;
@@ -231,6 +236,9 @@ device_has_media (struct device_t *device)
         break;
         case DEVICE_CD:
             return (udev_device_get_property_value(device->udev, "ID_CDROM_MEDIA") != NULL);
+        break;
+        case DEVICE_IDEVICE:
+            return 1;
         break;
     }
 }
@@ -326,6 +334,10 @@ device_search (char *devnode)
     return NULL;
 }
 
+#define APPLE_VID       0x05AC
+#define IDEV_PID_LOW    0x1290
+#define IDEV_PID_HI     0x129F
+
 struct device_t *
 device_new (struct udev_device *dev)
 {
@@ -346,7 +358,27 @@ device_new (struct udev_device *dev)
 
     device->type = DEVICE_UNK;
 
-    if (!device->filesystem) {
+    if (!strcmp(udev_device_get_subsystem(dev), "usb")  &&
+         udev_device_get_sysattr_value(dev, "idVendor") &&
+         udev_device_get_sysattr_value(dev, "idProduct")) {
+        int vid;
+        int pid;
+
+        vid = atoi(udev_device_get_sysattr_value(dev, "idVendor"));
+        pid = atoi(udev_device_get_sysattr_value(dev, "idProduct"));
+
+        log_write("DEBUG VID", (char *)udev_device_get_sysattr_value(dev, "idVendor"));
+        log_write("DEBUG PID", (char *)udev_device_get_sysattr_value(dev, "idProduct"));
+
+        if (vid == APPLE_VID    &&
+            pid >= IDEV_PID_LOW &&
+            pid <= IDEV_PID_HI) {
+                log_write("INFO", "iDevice detected\n");
+                device->type = DEVICE_IDEVICE;
+        }
+    }
+
+    if (device->type != DEVICE_IDEVICE && !device->filesystem) {
         device_destroy(device);
         return NULL;
     }
@@ -405,12 +437,17 @@ device_mount (struct udev_device *dev)
 
     mkdir(device->mountpoint, 777);
        
-    sprintf(cmdline, MOUNT_CMD,
-            (device->fstab_entry) ? device->fstab_entry->type : device->filesystem, 
-            g_uid, g_gid,
-            (device->fstab_entry) ? device->fstab_entry->opts : "defaults", 
-            device->devnode, 
-            device->mountpoint);
+    if (device->type == DEVICE_IDEVICE) {
+        sprintf(cmdline, IFUSE_CMD,
+                device->mountpoint);
+    } else {
+        sprintf(cmdline, MOUNT_CMD,
+                (device->fstab_entry) ? device->fstab_entry->type : device->filesystem, 
+                g_uid, g_gid,
+                (device->fstab_entry) ? device->fstab_entry->opts : "defaults", 
+                device->devnode, 
+                device->mountpoint);
+    }
 
     if (system(cmdline) < 0) {
         log_write("ERR", "Error while executing mount");
@@ -543,7 +580,7 @@ main (int argc, char **argv)
     if (!log_open()) {
         printf("Cannot open the log for writing\nAre you running me as root ?\n");
         return 0;
-    }    
+    }   
 
     if (!daemonize()) {
         printf("Could not spawn the daemon...\n");
@@ -577,8 +614,9 @@ main (int argc, char **argv)
         log_write("ERR", "Cannot enable receiving");   
         goto cleanup;
     }
-    if (udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL)) {
-        log_write("ERR", "Cannot set the filter");
+    if (udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL) ||
+        udev_monitor_filter_add_match_subsystem_devtype(monitor, "usb", NULL)) {
+        log_write("ERR", "Cannot set the filters");
         goto cleanup;
     }
 
