@@ -300,6 +300,9 @@ device_search (char *devnode)
 {
     int j;
 
+    if (!devnode)
+        return NULL;
+
     for (j = 0; j < MAX_DEVICES; j++) {
         if (g_devices[j] && !strcmp(g_devices[j]->devnode, devnode))
             return g_devices[j];
