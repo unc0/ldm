@@ -513,6 +513,11 @@ daemonize ()
         exit(0);
     }
 
+    if (chdir("/") < 0) {
+        printf("chdir() failed\n");
+        return 0;
+    }
+
     umask(0);
 
     if (setsid() < 0) {
