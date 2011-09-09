@@ -344,6 +344,7 @@ device_new (struct udev_device *dev)
         syslog(LOG_INFO, (char *)udev_device_get_sysattr_value(dev, "idVendor"));
         syslog(LOG_INFO, (char *)udev_device_get_sysattr_value(dev, "idProduct"));
 
+        /* Check if matches the Apple vid and one of the pids */
         if (vid == APPLE_VID    &&
             pid >= IDEV_PID_LOW &&
             pid <= IDEV_PID_HI) {
@@ -351,21 +352,25 @@ device_new (struct udev_device *dev)
                 device->type = DEVICE_IDEVICE;
         }
     }
+    
+    /* No iDevice detected, must be a block device */
+    if (device->type == DEVICE_UNK) {
+        if (!device->filesystem) {
+            device_destroy(device);
+            return NULL;
+        }
 
-    if (device->type != DEVICE_IDEVICE && !device->filesystem) {
-        device_destroy(device);
-        return NULL;
+        if (!strcmp(dev_idtype, "disk") &&
+            (!strcmp(dev_type, "partition") || !strcmp(dev_type, "disk"))) {
+            device->type = DEVICE_VOLUME;
+        } else if (!strcmp(dev_idtype, "cd")) {
+            device->type = DEVICE_CD;
+        } else if (!strcmp(dev_idtype, "floppy")) {
+            device->type = DEVICE_FLOPPY;
+        }
     }
 
-    if (!strcmp(dev_idtype, "disk") &&
-        (!strcmp(dev_type, "partition") || !strcmp(dev_type, "disk"))) {
-        device->type = DEVICE_VOLUME;
-    } else if (!strcmp(dev_idtype, "cd")) {
-        device->type = DEVICE_CD;
-    } else if (!strcmp(dev_idtype, "floppy")) {
-        device->type = DEVICE_FLOPPY;
-    }
-
+    /* Not even a block device, reject it */
     if (device->type == DEVICE_UNK) {
         device_destroy(device);
         return NULL;
