@@ -55,7 +55,6 @@ static struct device_t  * g_devices[MAX_DEVICES];
 static FILE             * g_logfd;
 static FILE             * g_lockfd;
 static int                g_running;
-static int                g_uid, g_gid;
 
 /* A less stupid s_strdup */
 
@@ -407,7 +406,8 @@ device_mount (struct udev_device *dev)
 {
     struct device_t *device;
     char cmdline[256];
-
+    struct passwd   *user_pwd;
+ 
     device = device_new(dev);
 
     if (!device)
@@ -423,9 +423,13 @@ device_mount (struct udev_device *dev)
         sprintf(cmdline, IFUSE_CMD,
                 device->mountpoint);
     } else {
+        /* Get the logged user gid and uid. Makes much more sense asking for it
+         * here as if you launch ldm as daemon getlogin will return NULL. */
+        user_pwd = getpwnam(getlogin());
+     
         sprintf(cmdline, MOUNT_CMD,
                 (device->fstab_entry) ? device->fstab_entry->type : device->filesystem, 
-                g_uid, g_gid,
+                user_pwd->pw_uid, user_pwd->pw_gid,
                 (device->fstab_entry) ? device->fstab_entry->opts : "defaults", 
                 device->devnode, 
                 device->mountpoint);
@@ -549,7 +553,6 @@ main (int argc, char **argv)
     struct udev_device  *device;
     const  char         *action;
     struct pollfd        pollfd;
-    struct passwd       *user_pwd;
 
     printf("ldm "VERSION_STR"\n");
     printf("2011 (C) The Lemon Man\n");
@@ -570,11 +573,6 @@ main (int argc, char **argv)
         printf("Could not spawn the daemon...\n");
         return 0;
     }
-
-    user_pwd = getpwnam(getlogin());
-
-    g_gid = user_pwd->pw_gid;
-    g_uid = user_pwd->pw_uid;
 
     signal(SIGTERM, sig_handler);
     signal(SIGINT , sig_handler);
